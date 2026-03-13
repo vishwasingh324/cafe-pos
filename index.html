@@ -1,0 +1,1245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Odoo Cafe POS — Restaurant Point of Sale</title>
+<meta name="description" content="Complete Restaurant POS System — Table ordering, Kitchen Display, UPI Payments & Reporting">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>☕</text></svg>">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+/* ═══════════════════════════════════════════════════════
+   TOKENS & RESET
+═══════════════════════════════════════════════════════ */
+:root{
+  --ink:       #0b0b13;
+  --ink2:      #111120;
+  --surface:   #171728;
+  --surface2:  #1e1e32;
+  --surface3:  #252540;
+  --line:      rgba(255,255,255,0.07);
+  --gold:      #f0a500;
+  --gold-dim:  rgba(240,165,0,0.12);
+  --gold-glow: rgba(240,165,0,0.25);
+  --rose:      #ff4d6d;
+  --rose-dim:  rgba(255,77,109,0.12);
+  --jade:      #00c896;
+  --jade-dim:  rgba(0,200,150,0.12);
+  --sky:       #4da6ff;
+  --sky-dim:   rgba(77,166,255,0.12);
+  --lavender:  #a78bfa;
+  --txt:       #f0f0f8;
+  --txt2:      #9090b0;
+  --txt3:      #555570;
+  --r4:4px; --r8:8px; --r12:12px; --r16:16px; --r24:24px;
+  --ease:cubic-bezier(.4,0,.2,1);
+  --sh: 0 8px 32px rgba(0,0,0,.5);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{font-size:14px;scroll-behavior:smooth}
+body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--ink);color:var(--txt);min-height:100vh;overflow-x:hidden}
+button{cursor:pointer;font-family:'Syne',sans-serif;border:none;outline:none;transition:all .2s var(--ease)}
+input,select,textarea{font-family:'Plus Jakarta Sans',sans-serif;transition:all .2s var(--ease)}
+a{text-decoration:none;color:inherit}
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--surface3);border-radius:2px}
+
+/* ── Screen System ── */
+.screen{display:none;min-height:100vh}
+.screen.active{display:flex;flex-direction:column}
+#screen-pos.active{flex-direction:column}
+#screen-dashboard.active{flex-direction:row}
+#screen-kitchen.active{flex-direction:column}
+#screen-customer.active{flex-direction:column}
+
+/* ── Toast ── */
+#toasts{position:fixed;bottom:24px;right:24px;z-index:9999;display:flex;flex-direction:column;gap:8px;pointer-events:none}
+.toast{display:flex;align-items:center;gap:10px;padding:12px 18px;border-radius:var(--r8);font-family:'Syne',sans-serif;font-size:13px;font-weight:600;backdrop-filter:blur(12px);border:1px solid transparent;animation:tIn .3s var(--ease) forwards;pointer-events:all;max-width:300px}
+.toast-s{background:rgba(0,200,150,.15);border-color:rgba(0,200,150,.3);color:var(--jade)}
+.toast-e{background:rgba(255,77,109,.15);border-color:rgba(255,77,109,.3);color:var(--rose)}
+.toast-i{background:rgba(77,166,255,.15);border-color:rgba(77,166,255,.3);color:var(--sky)}
+@keyframes tIn{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:translateX(0)}}
+
+/* ─────────────────────────────────────────────────────
+   SCREEN: AUTH
+───────────────────────────────────────────────────── */
+#screen-auth{
+  background:var(--ink);
+  align-items:center;justify-content:center;
+  position:relative;overflow:hidden;min-height:100vh
+}
+.auth-bg{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.auth-bg::before{content:'';position:absolute;width:600px;height:600px;border-radius:50%;background:radial-gradient(circle,rgba(240,165,0,.07) 0%,transparent 70%);top:-100px;left:-100px;animation:bgDrift 12s ease-in-out infinite alternate}
+.auth-bg::after{content:'';position:absolute;width:500px;height:500px;border-radius:50%;background:radial-gradient(circle,rgba(255,77,109,.05) 0%,transparent 70%);bottom:-100px;right:-100px;animation:bgDrift 15s ease-in-out infinite alternate-reverse}
+.auth-grid-lines{position:absolute;inset:0;background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px);background-size:60px 60px;opacity:.4}
+@keyframes bgDrift{from{transform:translate(0,0)}to{transform:translate(40px,30px)}}
+
+.auth-wrap{position:relative;z-index:1;width:420px}
+.auth-logo-row{text-align:center;margin-bottom:32px}
+.auth-brand{font-family:'Syne',sans-serif;font-size:28px;font-weight:800;color:var(--gold);letter-spacing:-1px}
+.auth-brand span{color:var(--txt);font-weight:400}
+.auth-tagline{font-size:12px;color:var(--txt3);letter-spacing:3px;text-transform:uppercase;margin-top:6px;font-family:'JetBrains Mono',monospace}
+
+.auth-card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r24);padding:36px;box-shadow:0 24px 80px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.05)}
+.auth-tabs{display:flex;background:var(--ink2);border-radius:var(--r8);padding:4px;gap:4px;margin-bottom:28px}
+.auth-tab{flex:1;padding:9px;text-align:center;border-radius:6px;font-family:'Syne',sans-serif;font-weight:700;font-size:13px;color:var(--txt3);cursor:pointer;transition:all .2s var(--ease);letter-spacing:.5px}
+.auth-tab.on{background:var(--gold);color:#000}
+
+.form{display:none;flex-direction:column;gap:16px}
+.form.on{display:flex}
+.fgrp{display:flex;flex-direction:column;gap:6px}
+.flbl{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--txt3);text-transform:uppercase;letter-spacing:1.5px}
+.finp{background:var(--surface2);border:1px solid var(--line);border-radius:var(--r8);padding:12px 14px;color:var(--txt);font-size:14px;width:100%}
+.finp:focus{outline:none;border-color:var(--gold);box-shadow:0 0 0 3px var(--gold-dim)}
+.finp::placeholder{color:var(--txt3)}
+select.finp{cursor:pointer}
+
+.btn-gold{background:var(--gold);color:#000;padding:13px;border-radius:var(--r8);font-size:14px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;width:100%}
+.btn-gold:hover{filter:brightness(1.1);transform:translateY(-1px);box-shadow:0 8px 24px rgba(240,165,0,.3)}
+.btn-gold:active{transform:scale(.98)}
+
+.auth-note{text-align:center;font-size:12px;color:var(--txt3);margin-top:4px}
+.auth-note b{color:var(--gold);cursor:pointer}
+
+/* ─────────────────────────────────────────────────────
+   SCREEN: DASHBOARD
+───────────────────────────────────────────────────── */
+.sidebar{
+  width:230px;min-height:100vh;background:var(--ink2);
+  border-right:1px solid var(--line);
+  display:flex;flex-direction:column;
+  position:fixed;top:0;left:0;height:100vh;z-index:200;
+  overflow-y:auto
+}
+.sb-logo{padding:24px 20px 16px;border-bottom:1px solid var(--line)}
+.sb-brand{font-family:'Syne',sans-serif;font-size:17px;font-weight:800;color:var(--gold)}
+.sb-sub{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--txt3);letter-spacing:2px;text-transform:uppercase;margin-top:3px}
+.sb-nav{flex:1;padding:12px 0}
+.sb-sec{padding:12px 18px 4px;font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--txt3);letter-spacing:2.5px;text-transform:uppercase}
+.sb-item{display:flex;align-items:center;gap:10px;padding:11px 18px;cursor:pointer;font-family:'Syne',sans-serif;font-weight:600;font-size:13px;color:var(--txt2);border-left:3px solid transparent;transition:all .15s var(--ease);position:relative}
+.sb-item:hover{color:var(--txt);background:rgba(255,255,255,.03)}
+.sb-item.on{color:var(--gold);border-left-color:var(--gold);background:var(--gold-dim)}
+.sb-icon{font-size:15px;width:20px;text-align:center;flex-shrink:0}
+.sb-badge{margin-left:auto;background:var(--rose);color:#fff;border-radius:20px;padding:2px 7px;font-size:10px;font-family:'JetBrains Mono',monospace}
+.sb-bottom{padding:16px;border-top:1px solid var(--line)}
+.sb-user{display:flex;align-items:center;gap:10px;padding:10px;background:var(--surface);border-radius:var(--r8);margin-bottom:10px}
+.sb-avatar{width:34px;height:34px;background:var(--gold);border-radius:var(--r8);display:flex;align-items:center;justify-content:center;font-family:'Syne',sans-serif;font-weight:800;font-size:13px;color:#000;flex-shrink:0}
+.sb-uname{font-family:'Syne',sans-serif;font-size:13px;font-weight:700}
+.sb-urole{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--txt3);text-transform:uppercase;letter-spacing:1px;margin-top:2px}
+.btn-logout{width:100%;padding:9px;background:transparent;border:1px solid rgba(255,77,109,.25);color:var(--rose);border-radius:var(--r8);font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase}
+.btn-logout:hover{background:var(--rose-dim)}
+
+.dash-main{margin-left:230px;flex:1;min-height:100vh;display:flex;flex-direction:column}
+.dash-topbar{padding:18px 28px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;background:var(--ink2);position:sticky;top:0;z-index:100}
+.dash-heading{font-family:'Syne',sans-serif;font-size:20px;font-weight:800}
+.dash-heading em{color:var(--gold);font-style:normal}
+.dash-crumb{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--txt3);margin-top:3px}
+.dash-content{flex:1;padding:24px 28px;overflow-y:auto}
+
+/* Sections */
+.ds{display:none}
+.ds.on{display:block}
+
+/* Stats */
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:22px}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:var(--r12);padding:20px;position:relative;overflow:hidden;transition:transform .2s var(--ease)}
+.stat:hover{transform:translateY(-2px)}
+.stat::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;border-radius:var(--r4)}
+.stat.g::before{background:var(--gold)}
+.stat.gr::before{background:var(--jade)}
+.stat.bl::before{background:var(--sky)}
+.stat.re::before{background:var(--rose)}
+.stat-v{font-family:'JetBrains Mono',monospace;font-size:26px;font-weight:600;margin-bottom:4px}
+.stat-l{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--txt3);text-transform:uppercase;letter-spacing:1.5px}
+.stat-ico{position:absolute;right:16px;top:50%;transform:translateY(-50%);font-size:36px;opacity:.1}
+
+/* Table */
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r12);overflow:hidden;margin-bottom:20px}
+.card-hd{padding:14px 18px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line)}
+.card-hd h3{font-family:'Syne',sans-serif;font-size:15px;font-weight:700}
+.btns{display:flex;gap:8px;flex-wrap:wrap}
+.btn{padding:8px 16px;border-radius:var(--r8);font-family:'Syne',sans-serif;font-size:12px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;transition:all .15s var(--ease)}
+.btn-a{background:var(--gold);color:#000}
+.btn-a:hover{filter:brightness(1.1);transform:translateY(-1px)}
+.btn-o{background:transparent;border:1px solid rgba(240,165,0,.4);color:var(--gold)}
+.btn-o:hover{background:var(--gold-dim)}
+.btn-r{background:transparent;border:1px solid rgba(255,77,109,.3);color:var(--rose)}
+.btn-r:hover{background:var(--rose-dim)}
+.btn-b{background:transparent;border:1px solid rgba(77,166,255,.3);color:var(--sky)}
+.btn-b:hover{background:var(--sky-dim)}
+.btn-g{background:var(--jade);color:#000}
+.btn-g:hover{filter:brightness(1.1)}
+
+table{width:100%;border-collapse:collapse}
+th{padding:11px 16px;text-align:left;font-family:'JetBrains Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:1.5px;color:var(--txt3);border-bottom:1px solid var(--line);background:rgba(0,0,0,.2)}
+td{padding:13px 16px;font-size:13px;border-bottom:1px solid var(--line)}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:rgba(255,255,255,.015)}
+
+.badge{display:inline-block;padding:3px 10px;border-radius:20px;font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:600;letter-spacing:.5px;text-transform:uppercase}
+.bg{background:var(--jade-dim);color:var(--jade)}
+.br{background:var(--rose-dim);color:var(--rose)}
+.by{background:var(--gold-dim);color:var(--gold)}
+.bb{background:var(--sky-dim);color:var(--sky)}
+.bm{background:rgba(255,255,255,.06);color:var(--txt3)}
+.bv{background:rgba(167,139,250,.12);color:var(--lavender)}
+
+/* Payment Methods */
+.pay-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.pay-card{background:var(--surface);border:2px solid var(--line);border-radius:var(--r16);padding:24px;transition:all .2s var(--ease)}
+.pay-card.enabled{border-color:rgba(240,165,0,.3)}
+.pay-ico{font-size:36px;margin-bottom:12px}
+.pay-nm{font-family:'Syne',sans-serif;font-size:17px;font-weight:800;margin-bottom:6px}
+.pay-desc{font-size:12px;color:var(--txt3);margin-bottom:18px;line-height:1.6}
+.tog-row{display:flex;align-items:center;gap:12px}
+.tog{position:relative;width:44px;height:24px;flex-shrink:0}
+.tog input{opacity:0;width:0;height:0}
+.tog-s{position:absolute;inset:0;background:var(--surface3);border-radius:12px;cursor:pointer;transition:.2s var(--ease)}
+.tog-s::before{content:'';position:absolute;width:18px;height:18px;background:var(--txt3);border-radius:50%;top:3px;left:3px;transition:.2s var(--ease)}
+.tog input:checked+.tog-s{background:rgba(240,165,0,.25)}
+.tog input:checked+.tog-s::before{background:var(--gold);transform:translateX(20px)}
+.tog-lbl{font-family:'Syne',sans-serif;font-size:13px;font-weight:700;color:var(--txt2)}
+.upi-extra{margin-top:14px;display:none;flex-direction:column;gap:8px}
+.upi-extra.on{display:flex}
+
+/* Floor Plan */
+.floor-tabs{display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap}
+.ftab{padding:8px 18px;border-radius:20px;font-family:'Syne',sans-serif;font-size:12px;font-weight:700;letter-spacing:.5px;background:var(--surface);border:1px solid var(--line);color:var(--txt2);cursor:pointer;transition:all .15s var(--ease)}
+.ftab.on{background:var(--gold-dim);border-color:var(--gold);color:var(--gold)}
+.tbl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px}
+.tbl-card{background:var(--surface2);border:1px solid var(--line);border-radius:var(--r12);padding:18px;text-align:center;cursor:pointer;transition:all .2s var(--ease)}
+.tbl-card:hover{border-color:var(--gold);transform:translateY(-2px)}
+.tbl-num{font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:600;color:var(--gold);margin-bottom:4px}
+.tbl-seats{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--txt3);text-transform:uppercase;letter-spacing:1px}
+
+/* Session */
+.session-card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r16);padding:28px;max-width:480px}
+.sess-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:22px}
+.sess-f .sf-l{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--txt3);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:5px}
+.sess-f .sf-v{font-family:'JetBrains Mono',monospace;font-size:15px}
+.btn-open-sess{background:var(--jade);color:#000;padding:14px 32px;border-radius:var(--r8);font-size:14px;font-weight:800;letter-spacing:.5px;text-transform:uppercase}
+.btn-open-sess:hover{filter:brightness(1.1);transform:translateY(-1px);box-shadow:0 8px 24px rgba(0,200,150,.25)}
+
+/* Reports */
+.rpt-filters{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-bottom:22px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r12);padding:18px}
+.fg{display:flex;flex-direction:column;gap:5px}
+.fgl{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--txt3);text-transform:uppercase;letter-spacing:1.5px}
+.charts-row{display:grid;grid-template-columns:3fr 2fr;gap:16px;margin-bottom:20px}
+.chart-card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r12);padding:18px}
+.chart-ttl{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--txt3);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:14px}
+
+/* ─────────────────────────────────────────────────────
+   SCREEN: POS TERMINAL
+───────────────────────────────────────────────────── */
+#screen-pos{background:var(--ink)}
+.pos-bar{height:54px;background:var(--ink2);border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 18px;flex-shrink:0;position:sticky;top:0;z-index:150}
+.pos-brand{font-family:'Syne',sans-serif;font-size:15px;font-weight:800;color:var(--gold)}
+.pos-tabs{display:flex;gap:4px}
+.pos-tab{padding:7px 16px;border-radius:var(--r8);font-family:'Syne',sans-serif;font-size:12px;font-weight:700;color:var(--txt3);background:transparent;border:1px solid transparent;text-transform:uppercase;letter-spacing:.5px}
+.pos-tab:hover{color:var(--txt)}
+.pos-tab.on{background:var(--gold-dim);border-color:var(--gold);color:var(--gold)}
+.pos-acts{display:flex;gap:6px}
+.pa{padding:7px 13px;border-radius:var(--r8);font-family:'Syne',sans-serif;font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;background:var(--surface2);border:1px solid var(--line);color:var(--txt2)}
+.pa:hover{border-color:var(--gold);color:var(--gold)}
+.pa.danger:hover{border-color:var(--rose);color:var(--rose)}
+
+.pos-body{flex:1;display:flex;overflow:hidden;min-height:0}
+
+/* Floor View */
+#vw-floor{flex:1;padding:22px;overflow-y:auto}
+.floor-hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}
+.floor-hd h2{font-family:'Syne',sans-serif;font-size:17px;font-weight:800}
+.legend{display:flex;gap:16px}
+.lgd{display:flex;align-items:center;gap:6px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--txt3);text-transform:uppercase;letter-spacing:1px}
+.ldot{width:8px;height:8px;border-radius:50%}
+
+.floor-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px}
+.ftc{background:var(--surface);border:2px solid var(--line);border-radius:var(--r12);padding:20px 14px;text-align:center;cursor:pointer;transition:all .2s var(--ease);position:relative}
+.ftc:hover{transform:translateY(-3px);box-shadow:var(--sh)}
+.ftc.free{border-color:rgba(0,200,150,.2)}
+.ftc.free:hover{border-color:var(--jade)}
+.ftc.occ{border-color:rgba(240,165,0,.3);background:rgba(240,165,0,.03)}
+.ftc.occ:hover{border-color:var(--gold)}
+.ftc-n{font-family:'JetBrains Mono',monospace;font-size:30px;font-weight:600;margin-bottom:6px}
+.ftc-n.fc{color:var(--jade)}
+.ftc-n.oc{color:var(--gold)}
+.ftc-s{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--txt3);text-transform:uppercase;letter-spacing:1px}
+.ftc-dot{position:absolute;top:10px;right:10px;width:8px;height:8px;border-radius:50%;background:var(--rose);animation:pulse 1.5s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(1.4)}}
+
+/* Order View */
+#vw-order{display:none;flex:1;overflow:hidden}
+.op-panel{flex:1.3;display:flex;flex-direction:column;border-right:1px solid var(--line);min-width:0;overflow:hidden}
+.cart-panel{width:320px;display:flex;flex-direction:column;background:var(--ink2);flex-shrink:0}
+
+.op-hd{padding:13px 16px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--line);background:var(--ink2);flex-shrink:0}
+.back-btn{width:32px;height:32px;background:var(--surface2);border-radius:var(--r8);border:1px solid var(--line);color:var(--txt2);font-size:16px;display:flex;align-items:center;justify-content:center;cursor:pointer}
+.back-btn:hover{border-color:var(--gold);color:var(--gold)}
+.op-tbl{font-family:'Syne',sans-serif;font-weight:800;font-size:14px}
+.op-tbl em{color:var(--gold);font-style:normal}
+
+.cats{display:flex;gap:6px;padding:11px 14px;border-bottom:1px solid var(--line);background:var(--ink2);overflow-x:auto;flex-shrink:0}
+.cats::-webkit-scrollbar{height:0}
+.ctab{padding:6px 14px;border-radius:20px;font-family:'Syne',sans-serif;font-size:11px;font-weight:700;white-space:nowrap;cursor:pointer;background:var(--surface2);border:1px solid var(--line);color:var(--txt3)}
+.ctab:hover{border-color:var(--gold);color:var(--gold)}
+.ctab.on{background:var(--gold);color:#000;border-color:var(--gold)}
+
+.prods-grid{flex:1;overflow-y:auto;padding:14px;display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:9px;align-content:start}
+.prod-card{background:var(--surface2);border:1px solid var(--line);border-radius:var(--r12);padding:14px 10px;cursor:pointer;text-align:center;transition:all .2s var(--ease)}
+.prod-card:hover{border-color:var(--gold);transform:translateY(-2px)}
+.prod-card:active{transform:scale(.96)}
+.pc-e{font-size:26px;margin-bottom:7px;display:block}
+.pc-n{font-family:'Syne',sans-serif;font-size:12px;font-weight:700;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pc-p{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--gold)}
+
+/* Cart */
+.cart-hd{padding:13px 16px;border-bottom:1px solid var(--line);flex-shrink:0}
+.cart-ttl{font-family:'JetBrains Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:2px;color:var(--txt3)}
+.cart-lines{flex:1;overflow-y:auto}
+.cl{display:flex;align-items:center;padding:10px 14px;gap:8px;border-bottom:1px solid var(--line)}
+.cl-nm{flex:1;font-size:12px;font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cl-qc{display:flex;align-items:center;gap:5px;flex-shrink:0}
+.qb{width:22px;height:22px;background:var(--surface3);border:1px solid var(--line);border-radius:var(--r4);color:var(--txt2);font-size:14px;display:flex;align-items:center;justify-content:center;cursor:pointer}
+.qb:hover{border-color:var(--gold);color:var(--gold)}
+.cl-q{font-family:'JetBrains Mono',monospace;font-size:12px;min-width:18px;text-align:center}
+.cl-p{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--gold);min-width:52px;text-align:right;flex-shrink:0}
+.cl-x{color:var(--txt3);font-size:11px;cursor:pointer;padding:2px 4px;flex-shrink:0}
+.cl-x:hover{color:var(--rose)}
+.empty-cart{display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;padding:40px;text-align:center;color:var(--txt3)}
+.empty-ico{font-size:40px;opacity:.25;margin-bottom:12px}
+.empty-txt{font-family:'JetBrains Mono',monospace;font-size:11px;text-transform:uppercase;letter-spacing:1.5px}
+
+.cart-ft{padding:14px;border-top:1px solid var(--line);flex-shrink:0}
+.totals{margin-bottom:12px}
+.tot-row{display:flex;justify-content:space-between;margin-bottom:5px;font-size:12px;color:var(--txt2)}
+.tot-row.big{font-family:'JetBrains Mono',monospace;font-size:17px;color:var(--txt);padding-top:8px;border-top:1px solid var(--line);margin-top:6px}
+.tot-row.big .tl{font-family:'Syne',sans-serif;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.5px}
+.cact{display:flex;flex-direction:column;gap:7px}
+.btn-kitchen{background:transparent;border:1px solid rgba(77,166,255,.3);color:var(--sky);padding:10px;border-radius:var(--r8);font-size:12px;font-weight:700;letter-spacing:.5px;text-transform:uppercase}
+.btn-kitchen:hover{background:var(--sky-dim)}
+.btn-pay{background:var(--gold);color:#000;padding:12px;border-radius:var(--r8);font-size:14px;font-weight:800;letter-spacing:.5px;text-transform:uppercase}
+.btn-pay:hover{filter:brightness(1.1);transform:translateY(-1px);box-shadow:0 6px 20px var(--gold-glow)}
+
+/* ─────────────────────────────────────────────────────
+   PAYMENT OVERLAY
+───────────────────────────────────────────────────── */
+#pay-overlay{position:fixed;inset:0;z-index:500;background:rgba(0,0,0,.75);backdrop-filter:blur(8px);display:none;align-items:center;justify-content:center;padding:20px}
+#pay-overlay.on{display:flex}
+.pay-modal{background:var(--surface);border:1px solid var(--line);border-radius:var(--r24);width:100%;max-width:400px;animation:slideUp .3s var(--ease)}
+@keyframes slideUp{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:translateY(0)}}
+.pm-hd{padding:22px 24px 0}
+.pm-lbl{font-family:'JetBrains Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:2px;color:var(--txt3);margin-bottom:6px}
+.pm-amt{font-family:'JetBrains Mono',monospace;font-size:44px;font-weight:600;color:var(--gold);line-height:1}
+.pm-body{padding:22px 24px}
+.pm-sec-lbl{font-family:'JetBrains Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:1.5px;color:var(--txt3);margin-bottom:10px}
+.pm-meths{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:18px}
+.pm-mth{background:var(--surface2);border:1px solid var(--line);border-radius:var(--r12);padding:13px 8px;text-align:center;cursor:pointer;transition:all .15s var(--ease)}
+.pm-mth:hover{border-color:var(--gold)}
+.pm-mth.on{background:var(--gold-dim);border-color:var(--gold)}
+.pm-mth-i{font-size:22px;margin-bottom:5px;display:block}
+.pm-mth-l{font-family:'Syne',sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--txt2)}
+.pm-mth.on .pm-mth-l{color:var(--gold)}
+
+.cash-row{display:flex;flex-direction:column;gap:6px;margin-bottom:12px}
+.cash-lbl{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--txt3);text-transform:uppercase;letter-spacing:1.5px}
+.chg-bar{display:flex;justify-content:space-between;padding:10px 13px;background:var(--surface2);border-radius:var(--r8);margin-bottom:14px}
+.chg-l{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--txt3);text-transform:uppercase;letter-spacing:1px}
+.chg-v{font-family:'JetBrains Mono',monospace;font-size:16px;color:var(--jade)}
+
+.btn-validate{background:var(--jade);color:#000;width:100%;padding:13px;border-radius:var(--r8);font-size:14px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;margin-bottom:8px}
+.btn-validate:hover{filter:brightness(1.1)}
+.btn-cpay{background:transparent;border:1px solid var(--rose-dim);color:var(--rose);width:100%;padding:10px;border-radius:var(--r8);font-size:12px;font-weight:700;letter-spacing:.5px;text-transform:uppercase}
+.btn-cpay:hover{background:var(--rose-dim)}
+
+/* UPI */
+.upi-view{display:none;text-align:center;padding:0 24px 24px}
+.upi-view.on{display:block}
+.upi-ttl{font-family:'JetBrains Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:2px;color:var(--txt3);margin-bottom:14px}
+.qr-box{width:160px;height:160px;background:#fff;border-radius:var(--r12);margin:0 auto 12px;display:flex;align-items:center;justify-content:center;padding:8px}
+.upi-a{font-family:'JetBrains Mono',monospace;font-size:22px;color:var(--gold);margin-bottom:3px}
+.upi-id{font-size:11px;color:var(--txt3);margin-bottom:18px}
+.upi-btns{display:flex;gap:8px}
+.btn-upi-ok{flex:1;background:var(--jade);color:#000;padding:12px;border-radius:var(--r8);font-size:13px;font-weight:800;letter-spacing:.5px;text-transform:uppercase}
+.btn-upi-ok:hover{filter:brightness(1.1)}
+.btn-upi-no{flex:1;background:transparent;border:1px solid rgba(255,77,109,.3);color:var(--rose);padding:12px;border-radius:var(--r8);font-size:13px;font-weight:800;letter-spacing:.5px;text-transform:uppercase}
+.btn-upi-no:hover{background:var(--rose-dim)}
+
+/* Pay Success */
+#pay-ok{position:fixed;inset:0;z-index:600;background:rgba(0,0,0,.85);backdrop-filter:blur(10px);display:none;align-items:center;justify-content:center;cursor:pointer}
+#pay-ok.on{display:flex;animation:fIn .3s var(--ease)}
+@keyframes fIn{from{opacity:0}to{opacity:1}}
+.ok-inner{text-align:center;animation:popIn .4s cubic-bezier(.34,1.56,.64,1)}
+@keyframes popIn{from{opacity:0;transform:scale(.6)}to{opacity:1;transform:scale(1)}}
+.ok-ico{font-size:80px;margin-bottom:14px}
+.ok-lbl{font-family:'JetBrains Mono',monospace;font-size:11px;text-transform:uppercase;letter-spacing:3px;color:var(--jade);margin-bottom:8px}
+.ok-amt{font-family:'JetBrains Mono',monospace;font-size:56px;font-weight:600;color:#fff;margin-bottom:6px;line-height:1}
+.ok-rec{font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--txt3);margin-bottom:28px}
+.ok-tap{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--txt3);letter-spacing:2px;text-transform:uppercase}
+
+/* ─────────────────────────────────────────────────────
+   SCREEN: KITCHEN DISPLAY
+───────────────────────────────────────────────────── */
+#screen-kitchen{background:#070710}
+.k-bar{height:58px;background:var(--ink2);border-bottom:2px solid rgba(240,165,0,.15);display:flex;align-items:center;justify-content:space-between;padding:0 22px;flex-shrink:0}
+.k-brand{font-family:'Syne',sans-serif;font-size:16px;font-weight:800;color:var(--gold)}
+.k-clock{font-family:'JetBrains Mono',monospace;font-size:24px;color:var(--txt)}
+.k-live{display:flex;align-items:center;gap:8px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--jade);text-transform:uppercase;letter-spacing:1.5px}
+
+.k-cols{flex:1;display:grid;grid-template-columns:repeat(3,1fr);overflow:hidden}
+.kcol{border-right:1px solid var(--line);display:flex;flex-direction:column;overflow:hidden}
+.kcol:last-child{border-right:none}
+.kch{padding:14px 18px;display:flex;align-items:center;gap:10px;border-bottom:3px solid}
+.kch.t{border-color:var(--sky)}
+.kch.p{border-color:var(--gold)}
+.kch.c{border-color:var(--jade)}
+.kct{font-family:'Syne',sans-serif;font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:1.5px}
+.kch.t .kct{color:var(--sky)}
+.kch.p .kct{color:var(--gold)}
+.kch.c .kct{color:var(--jade)}
+.kcc{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600}
+.kch.t .kcc{background:var(--sky-dim);color:var(--sky)}
+.kch.p .kcc{background:var(--gold-dim);color:var(--gold)}
+.kch.c .kcc{background:var(--jade-dim);color:var(--jade)}
+.kcb{flex:1;overflow-y:auto;padding:10px;display:flex;flex-direction:column;gap:8px}
+
+.ktkt{background:var(--surface);border:1px solid var(--line);border-radius:var(--r12);overflow:hidden;cursor:pointer;transition:all .2s var(--ease)}
+.ktkt:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(0,0,0,.4)}
+.ktkt-hd{padding:10px 14px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line)}
+.kt-ord{font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--gold)}
+.kt-tbl{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--txt3);text-transform:uppercase;letter-spacing:1px}
+.kt-tm{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--txt3)}
+.ktkt-items{padding:10px 14px;display:flex;flex-direction:column;gap:5px}
+.ki{display:flex;align-items:center;gap:8px;cursor:pointer;padding:3px 0}
+.ki:hover{opacity:.7}
+.ki.done .ki-n{text-decoration:line-through;color:var(--txt3)}
+.ki-q{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--gold);min-width:22px}
+.ki-n{font-size:12px;font-weight:600}
+.ktkt-ft{padding:8px 14px;border-top:1px solid var(--line);background:rgba(0,0,0,.2)}
+.ktkt-adv{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--txt3);text-align:center;text-transform:uppercase;letter-spacing:1px}
+.k-empty{padding:24px;text-align:center;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--txt3);text-transform:uppercase;letter-spacing:1.5px}
+
+/* ─────────────────────────────────────────────────────
+   SCREEN: CUSTOMER DISPLAY
+───────────────────────────────────────────────────── */
+#screen-customer{background:#060610}
+.cu-bar{padding:18px 32px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line)}
+.cu-brand{font-family:'Syne',sans-serif;font-size:20px;font-weight:800;color:var(--gold)}
+.cu-tbl{font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--txt3)}
+.cu-body{flex:1;display:grid;grid-template-columns:3fr 2fr;overflow:hidden}
+.cu-items{padding:32px;border-right:1px solid var(--line);overflow-y:auto}
+.cu-ttl{font-family:'JetBrains Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:2px;color:var(--txt3);margin-bottom:24px}
+.cu-row{display:flex;justify-content:space-between;align-items:center;padding:18px 0;border-bottom:1px solid var(--line)}
+.cu-nm{font-size:22px;font-weight:600}
+.cu-qty{font-family:'JetBrains Mono',monospace;font-size:16px;color:var(--txt3)}
+.cu-pr{font-family:'JetBrains Mono',monospace;font-size:20px;color:var(--gold)}
+.cu-pay{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px;text-align:center}
+.cu-tot-l{font-family:'JetBrains Mono',monospace;font-size:11px;text-transform:uppercase;letter-spacing:2px;color:var(--txt3);margin-bottom:8px}
+.cu-amt{font-family:'JetBrains Mono',monospace;font-size:64px;font-weight:600;color:var(--txt);line-height:1;margin-bottom:24px}
+.cu-status{padding:16px 48px;border-radius:50px;font-family:'Syne',sans-serif;font-size:22px;font-weight:800;letter-spacing:2px;text-transform:uppercase;border:2px solid}
+.cu-status.unpaid{background:var(--rose-dim);border-color:var(--rose);color:var(--rose)}
+.cu-status.paid{background:var(--jade-dim);border-color:var(--jade);color:var(--jade)}
+.cu-ft{padding:14px 32px;border-top:1px solid var(--line);text-align:center;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--txt3);text-transform:uppercase;letter-spacing:2px}
+
+/* ─────────────────────────────────────────────────────
+   MODAL SYSTEM
+───────────────────────────────────────────────────── */
+.modal{position:fixed;inset:0;z-index:400;background:rgba(0,0,0,.7);backdrop-filter:blur(8px);display:none;align-items:center;justify-content:center;padding:20px}
+.modal.on{display:flex}
+.modal-box{background:var(--surface);border:1px solid var(--line);border-radius:var(--r16);width:100%;max-width:500px;animation:slideUp .3s var(--ease);max-height:85vh;overflow-y:auto}
+.mhd{padding:18px 22px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;border-left:4px solid var(--gold)}
+.mttl{font-family:'Syne',sans-serif;font-size:17px;font-weight:800}
+.mclose{width:28px;height:28px;background:var(--surface2);border-radius:var(--r4);color:var(--txt3);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;border:none}
+.mclose:hover{color:var(--rose)}
+.mbody{padding:20px 22px;display:flex;flex-direction:column;gap:13px}
+.mft{padding:14px 22px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;gap:8px}
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+
+/* Responsive tweaks */
+@media(max-width:900px){
+  .stats{grid-template-columns:repeat(2,1fr)}
+  .pay-grid{grid-template-columns:1fr}
+  .charts-row{grid-template-columns:1fr}
+  .cu-body{grid-template-columns:1fr}
+}
+@media(max-width:700px){
+  .sidebar{width:60px}
+  .sb-item span:last-child,.sb-brand,.sb-sub,.sb-uname,.sb-urole,.sb-sec{display:none}
+  .sb-item{justify-content:center;padding:13px}
+  .dash-main{margin-left:60px}
+  .stats{grid-template-columns:1fr 1fr}
+}
+</style>
+</head>
+<body>
+
+<!-- TOASTS -->
+<div id="toasts"></div>
+
+<!-- ══════════════════════════════════════════════════
+     AUTH SCREEN
+══════════════════════════════════════════════════ -->
+<div id="screen-auth" class="screen active">
+  <div class="auth-bg"><div class="auth-grid-lines"></div></div>
+  <div class="auth-wrap">
+    <div class="auth-logo-row">
+      <div class="auth-brand">☕ Odoo <span>Cafe</span></div>
+      <div class="auth-tagline">Point of Sale System</div>
+    </div>
+    <div class="auth-card">
+      <div class="auth-tabs">
+        <div class="auth-tab on" onclick="authTab('login')">Login</div>
+        <div class="auth-tab" onclick="authTab('signup')">Sign Up</div>
+      </div>
+      <form class="form on" id="f-login" onsubmit="doLogin(event)">
+        <div class="fgrp"><label class="flbl">Email</label><input class="finp" type="email" id="li-e" value="admin@cafe.com" placeholder="admin@cafe.com" required></div>
+        <div class="fgrp"><label class="flbl">Password</label><input class="finp" type="password" id="li-p" value="password" placeholder="••••••••" required></div>
+        <button type="submit" class="btn-gold">Open Session →</button>
+        <div class="auth-note">Default: admin@cafe.com / password</div>
+      </form>
+      <form class="form" id="f-signup" onsubmit="doSignup(event)">
+        <div class="fgrp"><label class="flbl">Full Name</label><input class="finp" id="su-n" placeholder="Your Name" required></div>
+        <div class="fgrp"><label class="flbl">Email</label><input class="finp" type="email" id="su-e" placeholder="you@cafe.com" required></div>
+        <div class="fgrp"><label class="flbl">Password</label><input class="finp" type="password" id="su-p" placeholder="••••••••" required></div>
+        <div class="fgrp"><label class="flbl">Role</label>
+          <select class="finp">
+            <option>Cashier</option><option>Admin</option>
+          </select>
+        </div>
+        <button type="submit" class="btn-gold">Create Account →</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════
+     DASHBOARD SCREEN
+══════════════════════════════════════════════════ -->
+<div id="screen-dashboard" class="screen">
+  <nav class="sidebar">
+    <div class="sb-logo"><div class="sb-brand">☕ Cafe POS</div><div class="sb-sub">Backend</div></div>
+    <div class="sb-nav">
+      <div class="sb-sec">Overview</div>
+      <div class="sb-item on" onclick="dsShow('overview',this)"><span class="sb-icon">📊</span><span>Dashboard</span></div>
+      <div class="sb-sec">Config</div>
+      <div class="sb-item" onclick="dsShow('products',this)"><span class="sb-icon">🍽️</span><span>Products</span></div>
+      <div class="sb-item" onclick="dsShow('payment',this)"><span class="sb-icon">💳</span><span>Payment Methods</span></div>
+      <div class="sb-item" onclick="dsShow('floors',this)"><span class="sb-icon">🏢</span><span>Floor Plan</span></div>
+      <div class="sb-sec">Operations</div>
+      <div class="sb-item" onclick="dsShow('sessions',this)"><span class="sb-icon">⚡</span><span>POS Sessions</span></div>
+      <div class="sb-item" onclick="dsShow('reports',this)"><span class="sb-icon">📈</span><span>Reports</span></div>
+      <div class="sb-item" onclick="goScreen('screen-kitchen')"><span class="sb-icon">🍳</span><span>Kitchen Display</span></div>
+      <div class="sb-item" onclick="goScreen('screen-customer')"><span class="sb-icon">🖥️</span><span>Customer Display</span></div>
+    </div>
+    <div class="sb-bottom">
+      <div class="sb-user"><div class="sb-avatar" id="sb-av">AD</div><div><div class="sb-uname" id="sb-nm">Admin</div><div class="sb-urole">Administrator</div></div></div>
+      <button class="btn-logout" onclick="goScreen('screen-auth')">↩ Logout</button>
+    </div>
+  </nav>
+  <main class="dash-main">
+    <div class="dash-topbar">
+      <div><div class="dash-heading" id="dh">Dashboard <em>Overview</em></div><div class="dash-crumb" id="dc">Home › Dashboard</div></div>
+      <div class="btns">
+        <button class="btn btn-g" onclick="goScreen('screen-pos')">🚀 Open POS Terminal</button>
+      </div>
+    </div>
+    <div class="dash-content">
+
+      <!-- OVERVIEW -->
+      <div id="ds-overview" class="ds on">
+        <div class="stats">
+          <div class="stat g"><div class="stat-v" style="color:var(--gold)">₹24,580</div><div class="stat-l">Today's Sales</div><div class="stat-ico">💰</div></div>
+          <div class="stat gr"><div class="stat-v" style="color:var(--jade)">47</div><div class="stat-l">Orders Today</div><div class="stat-ico">📋</div></div>
+          <div class="stat bl"><div class="stat-v" style="color:var(--sky)">12</div><div class="stat-l">Tables Active</div><div class="stat-ico">🪑</div></div>
+          <div class="stat re"><div class="stat-v" style="color:var(--rose)">3</div><div class="stat-l">Kitchen Pending</div><div class="stat-ico">🍳</div></div>
+        </div>
+        <div class="card">
+          <div class="card-hd"><h3>Recent Orders</h3><button class="btn btn-o" onclick="dsShow('reports',document.querySelector('[onclick*=reports]'))">View Reports</button></div>
+          <table><thead><tr><th>Order #</th><th>Table</th><th>Items</th><th>Amount</th><th>Method</th><th>Status</th></tr></thead>
+          <tbody>
+            <tr><td style="font-family:'JetBrains Mono',monospace">ORD-0047</td><td>Table 3</td><td>Pizza ×2, Coffee ×1</td><td style="font-family:'JetBrains Mono',monospace;color:var(--gold)">₹680</td><td><span class="badge bg">Cash</span></td><td><span class="badge bg">Paid</span></td></tr>
+            <tr><td style="font-family:'JetBrains Mono',monospace">ORD-0046</td><td>Table 6</td><td>Pasta ×1, Water ×2</td><td style="font-family:'JetBrains Mono',monospace;color:var(--gold)">₹420</td><td><span class="badge bb">UPI</span></td><td><span class="badge bg">Paid</span></td></tr>
+            <tr><td style="font-family:'JetBrains Mono',monospace">ORD-0045</td><td>Table 1</td><td>Burger ×3</td><td style="font-family:'JetBrains Mono',monospace;color:var(--gold)">₹960</td><td><span class="badge by">Digital</span></td><td><span class="badge by">Preparing</span></td></tr>
+            <tr><td style="font-family:'JetBrains Mono',monospace">ORD-0044</td><td>Table 8</td><td>Coffee ×4, Pasta ×2</td><td style="font-family:'JetBrains Mono',monospace;color:var(--gold)">₹1,120</td><td><span class="badge bg">Cash</span></td><td><span class="badge bg">Paid</span></td></tr>
+          </tbody></table>
+        </div>
+      </div>
+
+      <!-- PRODUCTS -->
+      <div id="ds-products" class="ds">
+        <div class="card">
+          <div class="card-hd"><h3>Product Catalog</h3><button class="btn btn-a" onclick="openModal('m-prod')">+ Add Product</button></div>
+          <table><thead><tr><th>Name</th><th>Category</th><th>Price</th><th>Tax</th><th>Kitchen</th><th>Status</th><th>Action</th></tr></thead>
+          <tbody id="prod-tbody">
+            <tr><td>🍕 Pizza Margherita</td><td>Main Course</td><td style="font-family:'JetBrains Mono',monospace;color:var(--gold)">₹320</td><td>5%</td><td><span class="badge bb">Yes</span></td><td><span class="badge bg">Active</span></td><td><button class="btn btn-o" style="padding:5px 12px;font-size:11px">Edit</button></td></tr>
+            <tr><td>🍝 Pasta Arrabbiata</td><td>Main Course</td><td style="font-family:'JetBrains Mono',monospace;color:var(--gold)">₹280</td><td>5%</td><td><span class="badge bb">Yes</span></td><td><span class="badge bg">Active</span></td><td><button class="btn btn-o" style="padding:5px 12px;font-size:11px">Edit</button></td></tr>
+            <tr><td>🍔 Chicken Burger</td><td>Snacks</td><td style="font-family:'JetBrains Mono',monospace;color:var(--gold)">₹220</td><td>5%</td><td><span class="badge bb">Yes</span></td><td><span class="badge bg">Active</span></td><td><button class="btn btn-o" style="padding:5px 12px;font-size:11px">Edit</button></td></tr>
+            <tr><td>☕ Cappuccino</td><td>Beverages</td><td style="font-family:'JetBrains Mono',monospace;color:var(--gold)">₹120</td><td>0%</td><td><span class="badge bm">No</span></td><td><span class="badge bg">Active</span></td><td><button class="btn btn-o" style="padding:5px 12px;font-size:11px">Edit</button></td></tr>
+            <tr><td>💧 Mineral Water</td><td>Beverages</td><td style="font-family:'JetBrains Mono',monospace;color:var(--gold)">₹40</td><td>0%</td><td><span class="badge bm">No</span></td><td><span class="badge bg">Active</span></td><td><button class="btn btn-o" style="padding:5px 12px;font-size:11px">Edit</button></td></tr>
+            <tr><td>🍰 Tiramisu</td><td>Desserts</td><td style="font-family:'JetBrains Mono',monospace;color:var(--gold)">₹180</td><td>5%</td><td><span class="badge bb">Yes</span></td><td><span class="badge bg">Active</span></td><td><button class="btn btn-o" style="padding:5px 12px;font-size:11px">Edit</button></td></tr>
+          </tbody></table>
+        </div>
+      </div>
+
+      <!-- PAYMENT METHODS -->
+      <div id="ds-payment" class="ds">
+        <div class="pay-grid">
+          <div class="pay-card enabled"><div class="pay-ico">💵</div><div class="pay-nm">Cash</div><div class="pay-desc">Accept physical currency. Automatic change calculation included at checkout.</div>
+            <div class="tog-row"><label class="tog"><input type="checkbox" checked onchange="togPay('cash',this)"><span class="tog-s"></span></label><span class="tog-lbl" id="lbl-cash">Enabled</span></div></div>
+          <div class="pay-card enabled"><div class="pay-ico">💳</div><div class="pay-nm">Digital / Card</div><div class="pay-desc">Card swipe, bank transfers, and net banking payments.</div>
+            <div class="tog-row"><label class="tog"><input type="checkbox" checked onchange="togPay('digital',this)"><span class="tog-s"></span></label><span class="tog-lbl" id="lbl-digital">Enabled</span></div></div>
+          <div class="pay-card"><div class="pay-ico">📲</div><div class="pay-nm">UPI QR</div><div class="pay-desc">Generate dynamic QR codes for instant UPI payments.</div>
+            <div class="tog-row"><label class="tog"><input type="checkbox" id="tog-upi" onchange="togUPI(this)"><span class="tog-s"></span></label><span class="tog-lbl" id="lbl-upi">Disabled</span></div>
+            <div class="upi-extra" id="upi-extra">
+              <label class="flbl" style="margin-top:6px">UPI ID</label>
+              <input class="finp" id="upi-id" value="cafe123@ybl.com" placeholder="yourname@bank">
+              <button class="btn btn-a" style="margin-top:4px" onclick="saveUpi()">Save UPI ID</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- FLOORS -->
+      <div id="ds-floors" class="ds">
+        <div class="btns" style="margin-bottom:16px"><button class="btn btn-a" onclick="openModal('m-floor')">+ Add Floor</button><button class="btn btn-o" onclick="openModal('m-table')">+ Add Table</button></div>
+        <div class="floor-tabs"><div class="ftab on">Ground Floor</div><div class="ftab">First Floor</div><div class="ftab">Terrace</div></div>
+        <div class="tbl-grid">
+          <div class="tbl-card"><div class="tbl-num">T1</div><div class="tbl-seats">4 Seats</div><div style="margin-top:8px"><span class="badge bg">Active</span></div></div>
+          <div class="tbl-card"><div class="tbl-num">T2</div><div class="tbl-seats">2 Seats</div><div style="margin-top:8px"><span class="badge bg">Active</span></div></div>
+          <div class="tbl-card"><div class="tbl-num">T3</div><div class="tbl-seats">6 Seats</div><div style="margin-top:8px"><span class="badge bg">Active</span></div></div>
+          <div class="tbl-card"><div class="tbl-num">T4</div><div class="tbl-seats">4 Seats</div><div style="margin-top:8px"><span class="badge bg">Active</span></div></div>
+          <div class="tbl-card"><div class="tbl-num">T5</div><div class="tbl-seats">4 Seats</div><div style="margin-top:8px"><span class="badge by">Inactive</span></div></div>
+          <div class="tbl-card" onclick="openModal('m-table')"><div class="tbl-num" style="color:var(--txt3)">+</div><div class="tbl-seats">Add Table</div></div>
+        </div>
+      </div>
+
+      <!-- SESSIONS -->
+      <div id="ds-sessions" class="ds">
+        <div class="session-card">
+          <div class="sess-grid">
+            <div class="sess-f"><div class="sf-l">Terminal</div><div class="sf-v">Odoo Cafe POS #1</div></div>
+            <div class="sess-f"><div class="sf-l">Last Opened</div><div class="sf-v" style="font-size:13px">Today 09:00 AM</div></div>
+            <div class="sess-f"><div class="sf-l">Last Closing Sale</div><div class="sf-v" style="color:var(--gold)">₹18,240</div></div>
+            <div class="sess-f"><div class="sf-l">Status</div><div class="sf-v"><span class="badge br">Closed</span></div></div>
+          </div>
+          <button class="btn-open-sess" onclick="goScreen('screen-pos')">⚡ Open Session</button>
+        </div>
+      </div>
+
+      <!-- REPORTS -->
+      <div id="ds-reports" class="ds">
+        <div class="rpt-filters">
+          <div class="fg"><div class="fgl">Period</div><select class="finp" style="padding:9px 12px"><option>Today</option><option>This Week</option><option>This Month</option><option>Custom Range</option></select></div>
+          <div class="fg"><div class="fgl">Session</div><select class="finp" style="padding:9px 12px"><option>All Sessions</option><option>Session #12</option><option>Session #11</option></select></div>
+          <div class="fg"><div class="fgl">Responsible</div><select class="finp" style="padding:9px 12px"><option>All Staff</option><option>Admin User</option></select></div>
+          <div class="fg"><div class="fgl">Product</div><select class="finp" style="padding:9px 12px"><option>All Products</option><option>Pizza</option><option>Pasta</option><option>Burger</option></select></div>
+          <button class="btn btn-a" style="align-self:flex-end" onclick="toast('Filters applied','s')">Apply</button>
+        </div>
+        <div class="stats">
+          <div class="stat g"><div class="stat-v" style="color:var(--gold)">₹1,24,800</div><div class="stat-l">Total Revenue</div></div>
+          <div class="stat gr"><div class="stat-v" style="color:var(--jade)">312</div><div class="stat-l">Total Orders</div></div>
+          <div class="stat bl"><div class="stat-v" style="color:var(--sky)">₹400</div><div class="stat-l">Avg Order Value</div></div>
+          <div class="stat re"><div class="stat-v" style="color:var(--gold);font-size:18px">🍕 Pizza</div><div class="stat-l">Best Seller</div></div>
+        </div>
+        <div class="charts-row">
+          <div class="chart-card"><div class="chart-ttl">Daily Revenue — This Week</div><canvas id="c-rev" height="200"></canvas></div>
+          <div class="chart-card"><div class="chart-ttl">Payment Split</div><canvas id="c-pay" height="200"></canvas></div>
+        </div>
+        <div class="btns">
+          <button class="btn btn-o" onclick="toast('PDF downloading…','i')">📄 Export PDF</button>
+          <button class="btn btn-o" onclick="toast('Excel downloading…','i')">📊 Export Excel</button>
+        </div>
+      </div>
+
+    </div>
+  </main>
+</div>
+
+<!-- ══════════════════════════════════════════════════
+     POS TERMINAL
+══════════════════════════════════════════════════ -->
+<div id="screen-pos" class="screen">
+  <header class="pos-bar">
+    <div class="pos-brand">☕ POS Terminal</div>
+    <div class="pos-tabs">
+      <button class="pos-tab on" id="pt-floor" onclick="posView('floor',this)">🏮 Tables</button>
+      <button class="pos-tab" id="pt-reg" onclick="posView('order',this)">🧾 Register</button>
+    </div>
+    <div class="pos-acts">
+      <button class="pa" onclick="toast('Data reloaded','s')">↻ Reload</button>
+      <button class="pa" onclick="goScreen('screen-dashboard')">⚙ Back-end</button>
+      <button class="pa danger" onclick="closeReg()">✕ Close</button>
+    </div>
+  </header>
+  <div class="pos-body">
+    <!-- Floor View -->
+    <div id="vw-floor" style="flex:1;padding:20px;overflow-y:auto">
+      <div class="floor-hd">
+        <h2>Ground Floor</h2>
+        <div class="legend">
+          <div class="lgd"><div class="ldot" style="background:var(--jade)"></div>Free</div>
+          <div class="lgd"><div class="ldot" style="background:var(--gold)"></div>Occupied</div>
+        </div>
+      </div>
+      <div class="floor-grid" id="floor-grid"></div>
+    </div>
+    <!-- Order View -->
+    <div id="vw-order" style="display:none;flex:1;overflow:hidden">
+      <div class="op-panel">
+        <div class="op-hd">
+          <div class="back-btn" onclick="backFloor()">←</div>
+          <div class="op-tbl">Order — <em id="otbl-lbl">Table 1</em></div>
+          <div style="margin-left:auto"><span class="badge by" id="o-num-badge">ORD-0048</span></div>
+        </div>
+        <div class="cats">
+          <div class="ctab on" onclick="catFilter('all',this)">All</div>
+          <div class="ctab" onclick="catFilter('main',this)">Main Course</div>
+          <div class="ctab" onclick="catFilter('snacks',this)">Snacks</div>
+          <div class="ctab" onclick="catFilter('beverages',this)">Beverages</div>
+          <div class="ctab" onclick="catFilter('desserts',this)">Desserts</div>
+        </div>
+        <div class="prods-grid" id="prods-grid"></div>
+      </div>
+      <div class="cart-panel">
+        <div class="cart-hd"><div class="cart-ttl">🛒 Order Lines</div></div>
+        <div id="cart-lines" style="flex:1;overflow-y:auto"></div>
+        <div class="cart-ft">
+          <div class="totals">
+            <div class="tot-row"><span>Subtotal</span><span id="t-sub" style="font-family:'JetBrains Mono',monospace">₹0.00</span></div>
+            <div class="tot-row"><span>Tax (5%)</span><span id="t-tax" style="font-family:'JetBrains Mono',monospace">₹0.00</span></div>
+            <div class="tot-row big"><span class="tl">Total</span><span id="t-tot">₹0.00</span></div>
+          </div>
+          <div class="cact">
+            <button class="btn-kitchen" onclick="sendKitchen()">🍳 Send to Kitchen</button>
+            <button class="btn-pay" onclick="openPay()">💳 Payment</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════
+     KITCHEN DISPLAY
+══════════════════════════════════════════════════ -->
+<div id="screen-kitchen" class="screen">
+  <header class="k-bar">
+    <div class="k-brand">🍳 Kitchen Display</div>
+    <div class="k-clock" id="k-clk">--:--:--</div>
+    <div style="display:flex;align-items:center;gap:14px">
+      <div class="k-live"><div style="width:8px;height:8px;border-radius:50%;background:var(--jade);animation:pulse 1.5s ease-in-out infinite"></div>Live</div>
+      <button class="pa" onclick="goScreen('screen-dashboard')">← Back</button>
+    </div>
+  </header>
+  <div class="k-cols">
+    <div class="kcol"><div class="kch t"><div class="kct">To Cook</div><div class="kcc" id="kcc0">0</div></div><div class="kcb" id="kb0"></div></div>
+    <div class="kcol"><div class="kch p"><div class="kct">Preparing</div><div class="kcc" id="kcc1">0</div></div><div class="kcb" id="kb1"></div></div>
+    <div class="kcol"><div class="kch c"><div class="kct">Completed</div><div class="kcc" id="kcc2">0</div></div><div class="kcb" id="kb2"></div></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════
+     CUSTOMER DISPLAY
+══════════════════════════════════════════════════ -->
+<div id="screen-customer" class="screen">
+  <header class="cu-bar">
+    <div class="cu-brand">☕ Odoo Cafe POS</div>
+    <div class="cu-tbl">Table 3 — Active Order</div>
+    <button class="pa" onclick="goScreen('screen-dashboard')">← Back</button>
+  </header>
+  <div class="cu-body" style="flex:1">
+    <div class="cu-items">
+      <div class="cu-ttl">Your Order</div>
+      <div class="cu-row"><span class="cu-nm">🍕 Pizza Margherita</span><span class="cu-qty">× 2</span><span class="cu-pr">₹640</span></div>
+      <div class="cu-row"><span class="cu-nm">☕ Cappuccino</span><span class="cu-qty">× 1</span><span class="cu-pr">₹120</span></div>
+      <div class="cu-row"><span class="cu-nm">💧 Mineral Water</span><span class="cu-qty">× 2</span><span class="cu-pr">₹80</span></div>
+    </div>
+    <div class="cu-pay">
+      <div class="cu-tot-l">Total Amount</div>
+      <div class="cu-amt">₹840</div>
+      <div class="cu-status unpaid" id="cu-st">UNPAID</div>
+      <div style="margin-top:20px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--txt3);text-transform:uppercase;letter-spacing:2px">Thank you for dining with us</div>
+      <button class="btn btn-g" style="margin-top:16px" onclick="toggleCuPaid()">Simulate Payment ↓</button>
+    </div>
+  </div>
+  <div class="cu-ft">Powered by Odoo Cafe POS · Scan QR on table for self-ordering</div>
+</div>
+
+<!-- ══════════════════════════════════════════════════
+     PAYMENT OVERLAY
+══════════════════════════════════════════════════ -->
+<div id="pay-overlay">
+  <div class="pay-modal">
+    <div class="pm-hd"><div class="pm-lbl">Payment</div><div class="pm-amt" id="pm-a">₹0</div></div>
+    <div class="pm-body">
+      <div id="pm-meth-sec">
+        <div class="pm-sec-lbl">Select Method</div>
+        <div class="pm-meths">
+          <div class="pm-mth" onclick="selMeth('cash',this)"><span class="pm-mth-i">💵</span><div class="pm-mth-l">Cash</div></div>
+          <div class="pm-mth" onclick="selMeth('digital',this)"><span class="pm-mth-i">💳</span><div class="pm-mth-l">Digital</div></div>
+          <div class="pm-mth" onclick="selMeth('upi',this)"><span class="pm-mth-i">📲</span><div class="pm-mth-l">UPI QR</div></div>
+        </div>
+        <div class="cash-row" id="cash-sec" style="display:none">
+          <label class="cash-lbl">Amount Tendered</label>
+          <input class="finp" type="number" id="cash-in" placeholder="Enter amount" oninput="calcChg()">
+        </div>
+        <div class="chg-bar" id="chg-bar" style="display:none"><span class="chg-l">Change Due</span><span class="chg-v" id="chg-v">₹0</span></div>
+        <button class="btn-validate" id="btn-val" style="display:none" onclick="doPayment()">✓ Validate Payment</button>
+        <button class="btn-cpay" onclick="closePay()">Cancel</button>
+      </div>
+      <!-- UPI -->
+      <div class="upi-view" id="upi-view">
+        <div class="upi-ttl">UPI QR Payment</div>
+        <div class="qr-box">
+          <svg viewBox="0 0 140 140" xmlns="http://www.w3.org/2000/svg" width="144" height="144">
+            <rect width="140" height="140" fill="white"/>
+            <!-- Position Detection Patterns -->
+            <rect x="10" y="10" width="38" height="38" fill="none" stroke="#000" stroke-width="4"/>
+            <rect x="18" y="18" width="22" height="22" fill="#000"/>
+            <rect x="92" y="10" width="38" height="38" fill="none" stroke="#000" stroke-width="4"/>
+            <rect x="100" y="18" width="22" height="22" fill="#000"/>
+            <rect x="10" y="92" width="38" height="38" fill="none" stroke="#000" stroke-width="4"/>
+            <rect x="18" y="100" width="22" height="22" fill="#000"/>
+            <!-- Data modules -->
+            <rect x="58" y="10" width="8" height="8" fill="#000"/><rect x="68" y="10" width="8" height="8" fill="#000"/>
+            <rect x="58" y="20" width="8" height="8" fill="#000"/><rect x="78" y="20" width="8" height="8" fill="#000"/>
+            <rect x="68" y="30" width="8" height="8" fill="#000"/><rect x="58" y="40" width="8" height="8" fill="#000"/>
+            <rect x="78" y="40" width="8" height="8" fill="#000"/>
+            <rect x="58" y="58" width="8" height="8" fill="#000"/><rect x="78" y="58" width="8" height="8" fill="#000"/>
+            <rect x="88" y="58" width="8" height="8" fill="#000"/><rect x="98" y="58" width="8" height="8" fill="#000"/>
+            <rect x="108" y="58" width="8" height="8" fill="#000"/><rect x="118" y="58" width="8" height="8" fill="#000"/>
+            <rect x="58" y="68" width="8" height="8" fill="#000"/><rect x="68" y="68" width="8" height="8" fill="#000"/>
+            <rect x="88" y="68" width="8" height="8" fill="#000"/><rect x="108" y="68" width="8" height="8" fill="#000"/>
+            <rect x="58" y="78" width="8" height="8" fill="#000"/><rect x="78" y="78" width="8" height="8" fill="#000"/>
+            <rect x="98" y="78" width="8" height="8" fill="#000"/><rect x="118" y="78" width="8" height="8" fill="#000"/>
+            <rect x="58" y="88" width="8" height="8" fill="#000"/><rect x="68" y="88" width="8" height="8" fill="#000"/>
+            <rect x="88" y="88" width="8" height="8" fill="#000"/><rect x="108" y="88" width="8" height="8" fill="#000"/>
+            <rect x="58" y="98" width="8" height="8" fill="#000"/><rect x="78" y="98" width="8" height="8" fill="#000"/>
+            <rect x="98" y="98" width="8" height="8" fill="#000"/>
+            <rect x="58" y="108" width="8" height="8" fill="#000"/><rect x="68" y="108" width="8" height="8" fill="#000"/>
+            <rect x="88" y="108" width="8" height="8" fill="#000"/><rect x="118" y="108" width="8" height="8" fill="#000"/>
+            <rect x="58" y="118" width="8" height="8" fill="#000"/><rect x="78" y="118" width="8" height="8" fill="#000"/>
+            <rect x="98" y="118" width="8" height="8" fill="#000"/><rect x="108" y="118" width="8" height="8" fill="#000"/>
+          </svg>
+        </div>
+        <div class="upi-a" id="upi-disp-a">₹0</div>
+        <div class="upi-id">cafe123@ybl.com</div>
+        <div class="upi-btns">
+          <button class="btn-upi-ok" onclick="doPayment()">✓ Confirmed</button>
+          <button class="btn-upi-no" onclick="closePay()">✕ Cancel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Pay Success -->
+<div id="pay-ok" onclick="dismissOk()">
+  <div class="ok-inner">
+    <div class="ok-ico">✅</div>
+    <div class="ok-lbl">Payment Successful</div>
+    <div class="ok-amt" id="ok-amt">₹0</div>
+    <div class="ok-rec" id="ok-rec">Receipt #ORD-0048</div>
+    <div class="ok-tap">Tap anywhere to continue</div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════
+     MODALS
+══════════════════════════════════════════════════ -->
+<!-- Product -->
+<div id="m-prod" class="modal">
+  <div class="modal-box">
+    <div class="mhd"><div class="mttl">Add Product</div><button class="mclose" onclick="closeModal('m-prod')">✕</button></div>
+    <div class="mbody">
+      <div class="fgrp"><label class="flbl">Product Name</label><input class="finp" placeholder="e.g. Pizza Margherita"></div>
+      <div class="two-col">
+        <div class="fgrp"><label class="flbl">Category</label><select class="finp"><option>Main Course</option><option>Snacks</option><option>Beverages</option><option>Desserts</option></select></div>
+        <div class="fgrp"><label class="flbl">Price (₹)</label><input class="finp" type="number" placeholder="0.00"></div>
+      </div>
+      <div class="two-col">
+        <div class="fgrp"><label class="flbl">Unit</label><select class="finp"><option>Plate</option><option>Glass</option><option>Cup</option><option>Piece</option></select></div>
+        <div class="fgrp"><label class="flbl">Tax %</label><input class="finp" type="number" placeholder="5"></div>
+      </div>
+      <div class="fgrp"><label class="flbl">Description</label><textarea class="finp" rows="2" placeholder="Short product description…"></textarea></div>
+      <div style="display:flex;align-items:center;gap:10px"><label class="tog"><input type="checkbox" checked><span class="tog-s"></span></label><span class="flbl" style="margin:0">Send to Kitchen Display</span></div>
+    </div>
+    <div class="mft"><button class="btn btn-r" onclick="closeModal('m-prod')">Cancel</button><button class="btn btn-a" onclick="saveProd()">Save Product</button></div>
+  </div>
+</div>
+<!-- Floor -->
+<div id="m-floor" class="modal">
+  <div class="modal-box" style="max-width:380px">
+    <div class="mhd"><div class="mttl">Add Floor</div><button class="mclose" onclick="closeModal('m-floor')">✕</button></div>
+    <div class="mbody"><div class="fgrp"><label class="flbl">Floor Name</label><input class="finp" placeholder="e.g. Ground Floor"></div></div>
+    <div class="mft"><button class="btn btn-r" onclick="closeModal('m-floor')">Cancel</button><button class="btn btn-a" onclick="closeModal('m-floor');toast('Floor added','s')">Add Floor</button></div>
+  </div>
+</div>
+<!-- Table -->
+<div id="m-table" class="modal">
+  <div class="modal-box" style="max-width:380px">
+    <div class="mhd"><div class="mttl">Add Table</div><button class="mclose" onclick="closeModal('m-table')">✕</button></div>
+    <div class="mbody">
+      <div class="fgrp"><label class="flbl">Floor</label><select class="finp"><option>Ground Floor</option><option>First Floor</option><option>Terrace</option></select></div>
+      <div class="two-col">
+        <div class="fgrp"><label class="flbl">Table Number</label><input class="finp" type="number" placeholder="7"></div>
+        <div class="fgrp"><label class="flbl">Seats</label><input class="finp" type="number" placeholder="4"></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px"><label class="tog"><input type="checkbox" checked><span class="tog-s"></span></label><span class="flbl" style="margin:0">Active</span></div>
+    </div>
+    <div class="mft"><button class="btn btn-r" onclick="closeModal('m-table')">Cancel</button><button class="btn btn-a" onclick="closeModal('m-table');toast('Table added','s')">Add Table</button></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════
+     JAVASCRIPT
+══════════════════════════════════════════════════ -->
+<script>
+// ── State ─────────────────────────────────────
+const S={
+  cart:[],
+  table:null,
+  orderNum:48,
+  payMeth:null,
+  total:0
+};
+
+const PRODS=[
+  {id:1,n:'Pizza Margherita',e:'🍕',p:320,cat:'main',tax:5},
+  {id:2,n:'Pasta Arrabbiata',e:'🍝',p:280,cat:'main',tax:5},
+  {id:3,n:'Chicken Burger',e:'🍔',p:220,cat:'snacks',tax:5},
+  {id:4,n:'Veg Wrap',e:'🌯',p:180,cat:'snacks',tax:5},
+  {id:5,n:'Garlic Bread',e:'🥖',p:90,cat:'snacks',tax:5},
+  {id:6,n:'Cappuccino',e:'☕',p:120,cat:'beverages',tax:0},
+  {id:7,n:'Latte',e:'🧋',p:130,cat:'beverages',tax:0},
+  {id:8,n:'Mineral Water',e:'💧',p:40,cat:'beverages',tax:0},
+  {id:9,n:'Fresh Juice',e:'🍊',p:90,cat:'beverages',tax:0},
+  {id:10,n:'Tiramisu',e:'🍰',p:180,cat:'desserts',tax:5},
+  {id:11,n:'Choc Cake',e:'🎂',p:160,cat:'desserts',tax:5},
+  {id:12,n:'Ice Cream',e:'🍨',p:120,cat:'desserts',tax:5},
+];
+
+const TABLES=[
+  {n:1,s:4,st:'free'},{n:2,s:2,st:'occupied'},{n:3,s:6,st:'free'},
+  {n:4,s:4,st:'occupied'},{n:5,s:4,st:'free'},{n:6,s:8,st:'occupied'},
+  {n:7,s:4,st:'free'},{n:8,s:2,st:'free'},{n:9,s:6,st:'free'},
+  {n:10,s:4,st:'occupied'},{n:11,s:4,st:'free'},{n:12,s:2,st:'free'},
+];
+
+const KITCHEN=[
+  {id:'ORD-0045',tbl:'T6',st:0,tm:'14:32',items:[{n:'Burger',q:3,done:false},{n:'Garlic Bread',q:2,done:false}]},
+  {id:'ORD-0044',tbl:'T1',st:0,tm:'14:28',items:[{n:'Pasta',q:2,done:false},{n:'Tiramisu',q:1,done:false}]},
+  {id:'ORD-0043',tbl:'T4',st:1,tm:'14:20',items:[{n:'Pizza',q:2,done:true},{n:'Cappuccino',q:2,done:false}]},
+  {id:'ORD-0042',tbl:'T2',st:2,tm:'14:05',items:[{n:'Veg Wrap',q:1,done:true},{n:'Latte',q:1,done:true}]},
+  {id:'ORD-0041',tbl:'T3',st:2,tm:'13:55',items:[{n:'Chicken Burger',q:2,done:true}]},
+  {id:'ORD-0040',tbl:'T5',st:2,tm:'13:48',items:[{n:'Choc Cake',q:3,done:true}]},
+];
+
+// ── Screen navigation ──────────────────────────
+function goScreen(id){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  if(id==='screen-pos') renderFloor();
+  if(id==='screen-kitchen'){renderKitchen();startKClock();}
+  if(id==='screen-dashboard') setTimeout(initCharts,120);
+}
+
+// ── Auth ──────────────────────────────────────
+function authTab(t){
+  document.querySelectorAll('.auth-tab').forEach(el=>el.classList.remove('on'));
+  document.querySelectorAll('.form').forEach(f=>f.classList.remove('on'));
+  document.querySelector(`.auth-tab[onclick*="${t}"]`).classList.add('on');
+  document.getElementById('f-'+t).classList.add('on');
+}
+function doLogin(e){
+  e.preventDefault();
+  toast('Welcome back, Admin! 👋','s');
+  document.getElementById('sb-nm').textContent='Admin';
+  document.getElementById('sb-av').textContent='AD';
+  setTimeout(()=>goScreen('screen-dashboard'),500);
+}
+function doSignup(e){
+  e.preventDefault();
+  const n=document.getElementById('su-n').value;
+  if(!n){toast('Fill all fields','e');return;}
+  toast('Account created! Log in.','s');
+  authTab('login');
+}
+
+// ── Dashboard ─────────────────────────────────
+const DMETA={
+  overview:{h:'Dashboard <em>Overview</em>',c:'Home › Dashboard'},
+  products:{h:'Product <em>Management</em>',c:'Home › Products'},
+  payment:{h:'Payment <em>Methods</em>',c:'Home › Payment Methods'},
+  floors:{h:'Floor Plan <em>Management</em>',c:'Home › Floor Plan'},
+  sessions:{h:'POS <em>Sessions</em>',c:'Home › Sessions'},
+  reports:{h:'Reports & <em>Analytics</em>',c:'Home › Reports'},
+};
+function dsShow(id,el){
+  document.querySelectorAll('.ds').forEach(d=>d.classList.remove('on'));
+  document.getElementById('ds-'+id).classList.add('on');
+  document.querySelectorAll('.sb-item').forEach(i=>i.classList.remove('on'));
+  if(el)el.classList.add('on');
+  const m=DMETA[id]||{h:id,c:'Home › '+id};
+  document.getElementById('dh').innerHTML=m.h;
+  document.getElementById('dc').textContent=m.c;
+  if(id==='reports')setTimeout(initCharts,120);
+}
+function togPay(t,el){
+  document.getElementById('lbl-'+t).textContent=el.checked?'Enabled':'Disabled';
+  toast(`${t} ${el.checked?'enabled':'disabled'}`,'s');
+}
+function togUPI(el){
+  document.getElementById('lbl-upi').textContent=el.checked?'Enabled':'Disabled';
+  document.getElementById('upi-extra').classList.toggle('on',el.checked);
+}
+function saveUpi(){toast('UPI ID saved: '+document.getElementById('upi-id').value,'s')}
+function saveProd(){closeModal('m-prod');toast('Product added!','s')}
+
+// ── Charts ────────────────────────────────────
+let chartsInit=false;
+function initCharts(){
+  if(chartsInit)return;
+  const rC=document.getElementById('c-rev');
+  const pC=document.getElementById('c-pay');
+  if(!rC||!pC)return;
+  chartsInit=true;
+  const gOpts={responsive:true,plugins:{legend:{display:false}},scales:{
+    x:{ticks:{color:'#555570'},grid:{color:'rgba(255,255,255,0.04)'}},
+    y:{ticks:{color:'#555570'},grid:{color:'rgba(255,255,255,0.04)'}}
+  }};
+  new Chart(rC,{type:'bar',data:{
+    labels:['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],
+    datasets:[{data:[12400,18200,15600,21800,19400,28600,24580],backgroundColor:'rgba(240,165,0,.55)',borderColor:'#f0a500',borderWidth:1,borderRadius:5}]
+  },options:gOpts});
+  new Chart(pC,{type:'doughnut',data:{
+    labels:['Cash','Digital','UPI'],
+    datasets:[{data:[45,32,23],backgroundColor:['rgba(0,200,150,.65)','rgba(77,166,255,.65)','rgba(240,165,0,.65)'],borderColor:['#00c896','#4da6ff','#f0a500'],borderWidth:2}]
+  },options:{responsive:true,plugins:{legend:{labels:{color:'#9090b0'}}}}});
+}
+
+// ── Floor ─────────────────────────────────────
+function renderFloor(){
+  const g=document.getElementById('floor-grid');
+  g.innerHTML=TABLES.map(t=>`
+    <div class="ftc ${t.st}" onclick="pickTable(${t.n})">
+      ${t.st==='occupied'?'<div class="ftc-dot"></div>':''}
+      <div class="ftc-n ${t.st==='free'?'fc':'oc'}">T${t.n}</div>
+      <div class="ftc-s">${t.s} Seats</div>
+      <div style="margin-top:8px"><span class="badge ${t.st==='free'?'bg':'by'}">${t.st==='free'?'Free':'Busy'}</span></div>
+    </div>`).join('');
+}
+function pickTable(n){
+  S.table=n;S.cart=[];
+  document.getElementById('otbl-lbl').innerHTML=`<em>Table ${n}</em>`;
+  document.getElementById('o-num-badge').textContent=`ORD-00${S.orderNum}`;
+  posView('order',document.getElementById('pt-reg'));
+  renderProds('all');renderCart();
+}
+function backFloor(){posView('floor',document.getElementById('pt-floor'));}
+function posView(v,el){
+  document.getElementById('vw-floor').style.display=v==='floor'?'block':'none';
+  document.getElementById('vw-order').style.display=v==='order'?'flex':'none';
+  document.querySelectorAll('.pos-tab').forEach(t=>t.classList.remove('on'));
+  if(el)el.classList.add('on');
+}
+function closeReg(){toast('Register closed. Session ended.','i');setTimeout(()=>goScreen('screen-dashboard'),900);}
+
+// ── Products ──────────────────────────────────
+function renderProds(cat){
+  const g=document.getElementById('prods-grid');
+  const list=cat==='all'?PRODS:PRODS.filter(p=>p.cat===cat);
+  g.innerHTML=list.map(p=>`
+    <div class="prod-card" onclick="addCart(${p.id})">
+      <span class="pc-e">${p.e}</span>
+      <div class="pc-n">${p.n}</div>
+      <div class="pc-p">₹${p.p}</div>
+    </div>`).join('');
+}
+function catFilter(c,el){
+  document.querySelectorAll('.ctab').forEach(t=>t.classList.remove('on'));
+  el.classList.add('on');renderProds(c);
+}
+
+// ── Cart ──────────────────────────────────────
+function addCart(id){
+  const p=PRODS.find(x=>x.id===id);
+  const ex=S.cart.find(x=>x.id===id);
+  if(ex)ex.qty++;else S.cart.push({...p,qty:1});
+  renderCart();
+}
+function chgQty(id,d){
+  const it=S.cart.find(x=>x.id===id);
+  if(!it)return;
+  it.qty+=d;
+  if(it.qty<=0)S.cart=S.cart.filter(x=>x.id!==id);
+  renderCart();
+}
+function delCart(id){S.cart=S.cart.filter(x=>x.id!==id);renderCart();}
+function renderCart(){
+  const el=document.getElementById('cart-lines');
+  if(!S.cart.length){
+    el.innerHTML='<div class="empty-cart"><div class="empty-ico">🛒</div><div class="empty-txt">No items yet</div></div>';
+    updTotals(0,0);return;
+  }
+  el.innerHTML=S.cart.map(it=>`
+    <div class="cl">
+      <div class="cl-nm">${it.e} ${it.n}</div>
+      <div class="cl-qc">
+        <div class="qb" onclick="chgQty(${it.id},-1)">−</div>
+        <div class="cl-q">${it.qty}</div>
+        <div class="qb" onclick="chgQty(${it.id},1)">+</div>
+      </div>
+      <div class="cl-p">₹${it.p*it.qty}</div>
+      <div class="cl-x" onclick="delCart(${it.id})">✕</div>
+    </div>`).join('');
+  const sub=S.cart.reduce((s,i)=>s+i.p*i.qty,0);
+  const tax=S.cart.reduce((s,i)=>s+(i.p*i.qty*(i.tax/100)),0);
+  updTotals(sub,tax);
+}
+function updTotals(sub,tax){
+  S.total=sub+tax;
+  document.getElementById('t-sub').textContent='₹'+sub.toFixed(2);
+  document.getElementById('t-tax').textContent='₹'+tax.toFixed(2);
+  document.getElementById('t-tot').textContent='₹'+S.total.toFixed(2);
+}
+function sendKitchen(){
+  if(!S.cart.length){toast('Cart is empty','e');return;}
+  const t=TABLES.find(x=>x.n===S.table);if(t)t.st='occupied';
+  toast('Order sent to kitchen! 🍳','s');
+}
+
+// ── Payment ───────────────────────────────────
+function openPay(){
+  if(!S.cart.length){toast('Cart is empty','e');return;}
+  document.getElementById('pm-a').textContent='₹'+S.total.toFixed(2);
+  document.getElementById('upi-disp-a').textContent='₹'+S.total.toFixed(2);
+  document.getElementById('pm-meth-sec').style.display='block';
+  document.getElementById('upi-view').classList.remove('on');
+  document.getElementById('cash-sec').style.display='none';
+  document.getElementById('chg-bar').style.display='none';
+  document.getElementById('btn-val').style.display='none';
+  document.querySelectorAll('.pm-mth').forEach(b=>b.classList.remove('on'));
+  S.payMeth=null;
+  document.getElementById('pay-overlay').classList.add('on');
+}
+function closePay(){document.getElementById('pay-overlay').classList.remove('on');}
+function selMeth(m,el){
+  document.querySelectorAll('.pm-mth').forEach(b=>b.classList.remove('on'));
+  el.classList.add('on');S.payMeth=m;
+  document.getElementById('cash-sec').style.display=m==='cash'?'flex':'none';
+  document.getElementById('cash-sec').style.flexDirection='column';
+  document.getElementById('btn-val').style.display=m==='upi'?'none':'block';
+  if(m==='upi'){
+    document.getElementById('pm-meth-sec').style.display='none';
+    document.getElementById('upi-view').classList.add('on');
+  }
+}
+function calcChg(){
+  const t=parseFloat(document.getElementById('cash-in').value)||0;
+  const chg=t-S.total;
+  document.getElementById('chg-bar').style.display=t>0?'flex':'none';
+  document.getElementById('chg-v').textContent='₹'+Math.max(0,chg).toFixed(2);
+}
+function doPayment(){
+  const m=S.payMeth;
+  if(!m){toast('Select a payment method','e');return;}
+  if(m==='cash'){
+    const t=parseFloat(document.getElementById('cash-in').value)||0;
+    if(t<S.total){toast('Amount insufficient','e');return;}
+  }
+  closePay();
+  const tbl=TABLES.find(x=>x.n===S.table);if(tbl)tbl.st='free';
+  document.getElementById('ok-amt').textContent='₹'+S.total.toFixed(2);
+  document.getElementById('ok-rec').textContent='Receipt #ORD-00'+S.orderNum;
+  document.getElementById('pay-ok').classList.add('on');
+  S.cart=[];S.orderNum++;
+}
+function dismissOk(){
+  document.getElementById('pay-ok').classList.remove('on');
+  S.table=null;
+  posView('floor',document.getElementById('pt-floor'));
+  renderFloor();
+  toast('Payment complete. Ready! ✓','s');
+}
+
+// ── Kitchen ───────────────────────────────────
+function renderKitchen(){
+  const cols=[[],[],[]];
+  KITCHEN.forEach(t=>cols[t.st].push(t));
+  [0,1,2].forEach(i=>{
+    document.getElementById('kcc'+i).textContent=cols[i].length;
+    const adv=['Click → start cooking','Click → mark complete','✓ Done'];
+    document.getElementById('kb'+i).innerHTML=cols[i].map(tkt=>`
+      <div class="ktkt" onclick="advTicket('${tkt.id}')">
+        <div class="ktkt-hd">
+          <div class="kt-ord">${tkt.id}</div>
+          <div class="kt-tbl">Table ${tkt.tbl}</div>
+          <div class="kt-tm">${tkt.tm}</div>
+        </div>
+        <div class="ktkt-items">
+          ${tkt.items.map((it,idx)=>`
+            <div class="ki${it.done?' done':''}" onclick="event.stopPropagation();togKItem('${tkt.id}',${idx})">
+              <div class="ki-q">×${it.q}</div>
+              <div class="ki-n">${it.n}</div>
+            </div>`).join('')}
+        </div>
+        <div class="ktkt-ft"><div class="ktkt-adv">${adv[i]}</div></div>
+      </div>`).join('')||'<div class="k-empty">No orders</div>';
+  });
+}
+function advTicket(id){
+  const t=KITCHEN.find(x=>x.id===id);
+  if(t&&t.st<2){t.st++;renderKitchen();toast(`${id} → ${['Preparing','Completed'][t.st-1]}`,'s');}
+}
+function togKItem(tid,idx){
+  const t=KITCHEN.find(x=>x.id===tid);
+  if(t){t.items[idx].done=!t.items[idx].done;renderKitchen();}
+}
+let kClkTimer;
+function startKClock(){
+  clearInterval(kClkTimer);
+  const tick=()=>{const n=new Date();document.getElementById('k-clk').textContent=n.toLocaleTimeString('en-IN');};
+  tick();kClkTimer=setInterval(tick,1000);
+}
+
+// ── Customer Display ───────────────────────────
+function toggleCuPaid(){
+  const el=document.getElementById('cu-st');
+  const p=el.classList.contains('paid');
+  el.classList.toggle('paid',!p);el.classList.toggle('unpaid',p);
+  el.textContent=p?'UNPAID':'PAID';
+  toast(p?'Status: Unpaid':'Payment received!',p?'i':'s');
+}
+
+// ── Modals ─────────────────────────────────────
+function openModal(id){document.getElementById(id).classList.add('on')}
+function closeModal(id){document.getElementById(id).classList.remove('on')}
+document.querySelectorAll('.modal').forEach(m=>m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('on')}));
+document.querySelectorAll('.floor-tabs .ftab').forEach(t=>t.addEventListener('click',function(){document.querySelectorAll('.floor-tabs .ftab').forEach(x=>x.classList.remove('on'));this.classList.add('on')}));
+
+// ── Toast ──────────────────────────────────────
+function toast(msg,type='i'){
+  const c=document.getElementById('toasts');
+  const icons={s:'✓',e:'✕',i:'ℹ'};
+  const t=document.createElement('div');
+  t.className=`toast toast-${type}`;
+  t.innerHTML=`<span>${icons[type]}</span> ${msg}`;
+  c.appendChild(t);
+  setTimeout(()=>{t.style.transition='.3s';t.style.opacity='0';t.style.transform='translateX(20px)';setTimeout(()=>t.remove(),300)},3200);
+}
+
+// ── Keyboard ──────────────────────────────────
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape'){
+    document.querySelectorAll('.modal.on').forEach(m=>m.classList.remove('on'));
+    closePay();
+  }
+});
+
+// ── Init ──────────────────────────────────────
+document.getElementById('pay-overlay').addEventListener('click',e=>{if(e.target===document.getElementById('pay-overlay'))closePay()});
+</script>
+</body>
+</html>
